@@ -1,7 +1,7 @@
 <?xml version='1.0'?>
 <launch>
     <arg name="veh"/>
-    <arg name="param_file_name" default="default"/>
+    <arg name="param_file_name" default="fsm_default"/>
 
     <node pkg="fsm" exec="fsm_node" name="fsm_node" namespace="$(var veh)">
         <param name="veh" value="$(var veh)"/>
