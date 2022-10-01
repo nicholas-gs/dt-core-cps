@@ -28,7 +28,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'fsm_node = fsm.fsm_node:main'
+            'fsm_node = fsm.fsm_node:main',
+            'logic_gate_node = fsm.logic_gate_node:main'
         ],
     },
 )
