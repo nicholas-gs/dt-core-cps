@@ -275,12 +275,12 @@ class GroundProjectionNode(Node):
         Returns:
             :obj:`numpy array`: the loaded homography matrix
         """
-        calibration_data, full_fp, _ = read_calibration(
+        calibration_data, full_fp = read_calibration(
             f"camera_extrinsic/{self._veh}.yaml")
         if calibration_data is None:
             self.get_logger().warn(f"Cannot import calibration data from"\
             f" {full_fp}, trying default file.")
-            calibration_data, full_fp, _ = read_calibration(
+            calibration_data, full_fp = read_calibration(
                 f"camera_extrinsic/default.yaml")
             if calibration_data is None:
                 self.get_logger().fatal("Cannot import default calibration"\
