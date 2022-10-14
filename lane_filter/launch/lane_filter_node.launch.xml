@@ -1,0 +1,11 @@
+<?xml version='1.0'?>
+<launch>
+    <arg name="veh"/>
+    <arg name="config_file_name" default="default"/>
+
+    <node pkg="lane_filter" exec="lane_filter_node" name="lane_filter_node" 
+        namespace="$(var veh)">
+        <param name="config_file_path" 
+            value="$(find-pkg-share lane_filter)/config/$(var config_file_name).yaml"/>
+    </node>
+</launch>

@@ -1,0 +1,14 @@
+<?xml version='1.0'?>
+<launch>
+    <arg name="veh"/>
+
+    <node pkg="lane_filter" exec="lane_filter_test_node"
+        name="lane_filter_test_node" namespace="$(var veh)">
+        <remap from="~/segment_list" to="lane_filter_node/segment_list"/>
+        <param name="x1" value="0.0"/>
+        <param name="y1" value="-0.1"/>
+        <param name="x2" value="0.2"/>
+        <param name="y2" value="0.0"/>
+        <param name="color" value="white"/>
+    </node>
+</launch>
