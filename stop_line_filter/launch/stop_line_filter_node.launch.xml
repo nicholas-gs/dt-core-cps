@@ -1,0 +1,10 @@
+<?xml version='1.0'?>
+<launch>
+    <arg name="veh"/>
+    <arg name="config_file_name" default="default"/>
+
+    <node pkg="stop_line_filter" exec="stop_line_filter_node" name="stop_line_filter_node" 
+        namespace="$(var veh)">
+        <param from="$(find-pkg-share stop_line_filter)/config/$(var config_file_name).yaml"/>
+    </node>
+</launch>
