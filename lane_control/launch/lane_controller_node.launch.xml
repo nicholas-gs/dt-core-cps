@@ -1,0 +1,10 @@
+<?xml version='1.0'?>
+<launch>
+    <arg name="veh"/>
+    <arg name="config_file_name" default="default"/>
+
+    <node pkg="lane_control" exec="lane_controller_node" name="lane_controller_node" 
+        namespace="$(var veh)">
+        <param from="$(find-pkg-share lane_control)/config/$(var config_file_name).yaml"/>
+    </node>
+</launch>
