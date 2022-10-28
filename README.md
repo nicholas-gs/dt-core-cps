@@ -29,3 +29,8 @@ Detect red stop line detected line segments.
 
 Computes the commands in form of linear and angular velocities, by processing
 the estimate error in lateral deviationa and heading.
+
+6. anti_instagram
+
+Make lane detection robust to illumination variation.
+More information can be found [here](https://github.com/duckietown/docs-fall2017_projects/blob/master/book/fall2017_projects/27_anti_instagram/30-final-project-report-anti-instagram.md).
