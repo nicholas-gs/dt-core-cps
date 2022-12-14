@@ -1,5 +1,0 @@
-/**:
-  ros__parameters:
-    interval : 5.0
-    color_balance_scale : 0.8
-    output_scale : 0.2

@@ -6,7 +6,6 @@ from rclpy.node import Node
 from cv_bridge import CvBridge
 from multiprocessing import Lock
 from sensor_msgs.msg import CompressedImage
-from rcl_interfaces.msg import ParameterType, ParameterDescriptor
 
 from dt_image_processing_utils import AntiInstagram
 from dt_interfaces_cps.msg import AntiInstagramThresholds
@@ -30,7 +29,7 @@ class AntiInstagramNode(Node):
             "~/uncorrected_image/compressed",
             self.image_cb,
             1)
-        
+
         self.ai = AntiInstagram()
         self.bridge = CvBridge()
         self.image_msg = None
@@ -39,39 +38,24 @@ class AntiInstagramNode(Node):
         # Intialize timer
         _ = self.create_timer(self._interval, self.calculate_new_parameters)
 
-        self.get_logger().info("Initialized")
+        self.get_logger().info(f"Node initialized with parameters - \
+interval: {self._interval}, \
+color_balance_scale: {self._color_balance_scale}, \
+output_scale: {self._output_scale}")
 
     def get_launch_params(self):
         """Retrieve the launch parameters."""
-        self.declare_parameters(
-            namespace='',
-            parameters=[
-                (
-                    'interval',
-                    None,
-                    ParameterDescriptor(name='interval',
-                        type=ParameterType.PARAMETER_DOUBLE)
-                ),
-                (
-                    'color_balance_scale', 
-                    None, 
-                    ParameterDescriptor(name='color_balance_scale',
-                        type=ParameterType.PARAMETER_DOUBLE)
-                ),
-                (
-                    'output_scale',
-                    None,
-                    ParameterDescriptor(name='output_scale',
-                        type=ParameterType.PARAMETER_DOUBLE)   
-                )
-            ])
+        self.declare_parameter("interval")
+        self.declare_parameter("color_balance_scale")
+        self.declare_parameter("output_scale")
 
         self._interval = self.get_parameter('interval')\
             .get_parameter_value().double_value
-        self._color_balance_scale = self.get_parameter('interval')\
+        self._color_balance_scale = self.get_parameter('color_balance_scale')\
             .get_parameter_value().double_value
         self._output_scale = self.get_parameter('output_scale')\
             .get_parameter_value().double_value
+
 
     def image_cb(self, msg: CompressedImage):
         """Callback function for image subscriber.
@@ -90,12 +74,12 @@ class AntiInstagramNode(Node):
         """
         with self.mutex:
             try:
-                image = self.bridge.compressed_imgmsg_to_cv2(
+                return self.bridge.compressed_imgmsg_to_cv2(
                     self.image_msg, 'bgr8')
             except ValueError as e:
                 self.get_logger().error(
                     f"Anti_instagram cannot decode image: {e}")
-        return image
+                return None
 
     def calculate_new_parameters(self):
         """Calculate the color balance thresholds and publish the results
@@ -105,9 +89,14 @@ class AntiInstagramNode(Node):
             self.get_logger().debug(f"Waiting for first image!")
             return
         image = self.decode_image_msg()
+        if image is None:
+            return
+
         lower_thresholds, higher_thresholds = \
             self.ai.calculate_color_balance_thresholds(
                 image, self._output_scale, self._color_balance_scale)
+        # convert values from numpy.uint8 to int
+        lower_thresholds = [int(val) for val in lower_thresholds]
 
         # Publish parameters
         msg = AntiInstagramThresholds()

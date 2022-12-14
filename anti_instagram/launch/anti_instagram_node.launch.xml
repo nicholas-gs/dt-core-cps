@@ -1,12 +1,15 @@
 <?xml version='1.0'?>
 <launch>
     <arg name="veh"/>
-    <arg name="param_file_name" default="default"/>
+    <arg name="interval" default="5.0"/>
+    <arg name="color_balance_scale" default="0.8"/>
+    <arg name="output_scale" default="0.2"/>
 
     <node pkg="anti_instagram" exec="anti_instagram_node" name="anti_instagram_node" 
         namespace="$(var veh)">
         <param name="veh" value="$(var veh)"/>
-        <param name="param_file_path" 
-            value="$(find-pkg-share anti_instagram)/config/$(var param_file_name).yaml"/>
+        <param name="interval" value="$(var interval)"/>
+        <param name="color_balance_scale" value="$(var color_balance_scale)"/>
+        <param name="output_scale" value="$(var output_scale)"/>
     </node>
 </launch>
