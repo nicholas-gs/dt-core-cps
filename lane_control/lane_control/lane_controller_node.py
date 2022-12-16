@@ -6,8 +6,8 @@ import numpy as np
 from functools import partial
 
 from rclpy.node import Node
+from rclpy.time import Time, Duration
 from rcl_interfaces.msg import (
-    IntegerRange,
     ParameterType,
     FloatingPointRange,
     ParameterDescriptor,
@@ -17,8 +17,6 @@ from rcl_interfaces.msg import (
 from lane_control.controller import LaneController
 from dt_interfaces_cps.msg import (
     LanePose,
-    FSMState,
-    BoolStamped,
     Twist2DStamped,
     StopLineReading,
     WheelsCmdStamped
@@ -101,7 +99,7 @@ class LaneControllerNode(Node):
         self.pose_msg = LanePose()
         self.pose_initialized = False
         self.pose_msg_dict = dict()
-        self.last_s = None
+        self.last_s: Time = None
         self.stop_line_distance = None
         self.stop_line_detected = False
         self.at_stop_line = False
@@ -214,13 +212,9 @@ class LaneControllerNode(Node):
                     type=ParameterType.PARAMETER_DOUBLE)),
                 ('stop_line_slowdown.end', None, ParameterDescriptor(
                     name='stop_line_slowdown.end',
-                    type=ParameterType.PARAMETER_DOUBLE)),
-                ('verbose', None, ParameterDescriptor(
-                    name='verbose',
-                    type=ParameterType.PARAMETER_INTEGER,
-                    integer_range=[IntegerRange(from_value=0, to_value=2)])),
+                    type=ParameterType.PARAMETER_DOUBLE))
             ])
-        self.params['~v_var'] = self.get_parameter('v_bar')\
+        self.params['~v_bar'] = self.get_parameter('v_bar')\
             .get_parameter_value().double_value
         self.params['~k_d'] = self.get_parameter('k_d')\
             .get_parameter_value().double_value
@@ -233,6 +227,8 @@ class LaneControllerNode(Node):
         self.params['~theta_thres'] = self.get_parameter('theta_thres')\
             .get_parameter_value().double_value
         self.params['~d_thres'] = self.get_parameter('d_thres')\
+            .get_parameter_value().double_value
+        self.params['~d_offset'] = self.get_parameter('d_offset')\
             .get_parameter_value().double_value
         self.params['~omega_ff'] = self.get_parameter('omega_ff')\
             .get_parameter_value().double_value
@@ -255,9 +251,6 @@ class LaneControllerNode(Node):
             'stop_line_slowdown.start').get_parameter_value().double_value
         self.params['~stop_line_slowdown']['end'] = self.get_parameter(
             'stop_line_slowdown.end').get_parameter_value().double_value
-
-        self.params['~verbose'] = self.get_parameter('verbose')\
-            .get_parameter_value().integer_value
 
     def publish_cmd(self, msg: Twist2DStamped):
         """Publish a message on the `car_cmd` topic.
@@ -351,11 +344,12 @@ class LaneControllerNode(Node):
             lane pose.
         :type pose_msg: LanePose
         """
-        current_s = self.get_clock().now()
-        dt = None
+        current_s: Time = self.get_clock().now()
+        dt: float = None
 
         if self.last_s is not None:
-            dt = current_s - self.last_s
+            # Get time elapsed in seconds
+            dt = (current_s - self.last_s).nanoseconds / 1e9
 
         if self.at_stop_line or self.at_obstacle_stop_line:
             v = 0

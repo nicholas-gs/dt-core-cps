@@ -13,7 +13,6 @@ from sensor_msgs.msg import (
     CompressedImage
 )
 
-# from image_processing.anti_instagram import AntiInstagram
 from dt_image_processing_utils import AntiInstagram
 from line_detector import (
     plotMaps,
@@ -29,6 +28,52 @@ from dt_interfaces_cps.msg import (
 
 
 class LineDetectorNode(Node):
+    """
+    The ``LineDetectorNode`` is responsible for detecting the line white, yellow
+    and red line segment in an image and is used for lane localization.
+    Upon receiving an image, this node reduces its resolution, cuts off the top
+    part so that only the road-containing part of the image is left, extracts
+    the white, red, and yellow segments and publishes them.
+    The main functionality of this node is implemented in the
+    :py:class:`line_detector.LineDetector` class.
+    The performance of this node can be very sensitive to its configuration
+    parameters. So you can tune the values in the configuration YAML file.
+    Debug publishers are also present to make debugging easier. To reduce
+    bandwidth, messages are only published on these topics if there are at
+    least 1 subscriber.
+    Args:
+        node_name (:obj:`str`): a unique, descriptive name for the node that
+            ROS will use
+    Configuration:
+        ~line_detector_parameters: A dictionary with the
+            parameters for the detector.
+        ~colors: A dictionary of colors and color ranges to be detected in the
+            image. The keys (color names) should match the ones in the Segment
+            message definition, otherwise an exception will be thrown!See the
+            ``config`` directory in the node code for the default ranges.
+        ~img_size: The desired downsized resolution of the image. Lower
+            resolution would result in faster detection but lower performance,
+            default is ``[120,160]``
+        ~top_cutoff: The number of rows to be removed from the top of the image
+            after resizing, default is 40
+    Subscriber:
+        ~camera_node/image/compressed: The camera images
+        ~anti_instagram_node/thresholds: The thresholds to do color correction
+    Publishers:
+        ~segment_list: A list of the detected segments.
+        ~debug/segments/compressed: Debug topic with the segments drawn on the
+            input image
+        ~debug/edges/compressed: Debug topic with the Canny edges drawn on the
+            input image
+        ~debug/maps/compressed: Debug topic with the regions falling in each
+            color range drawn on the input image
+        ~debug/ranges_HS: Debug topic with a histogram of the colors in the
+            input image and the color ranges, Hue-Saturation projection
+        ~debug/ranges_SV: Debug topic with a histogram of the colors in the
+            input image and the color ranges, Saturation-Value projection
+        ~debug/ranges_HV: Debug topic with a histogram of the colors in the
+            input image and the color ranges, Hue-Value projection
+    """
     def __init__(self, node_name: str):
         super().__init__(node_name)
         self.load_config_file(self.get_config_filepath())
@@ -106,6 +151,12 @@ class LineDetectorNode(Node):
         self._top_cutoff = data.get('top_cutoff')
         self._img_size = data.get('img_size')
 
+        self.get_logger().debug(f"Loaded config file: \
+_line_detector_parameters: {self._line_detector_parameters}, \
+_colors: {self._colors}, \
+_top_cutoff: {self._top_cutoff}, \
+_img_size: {self._img_size}")
+
     def thresholds_cb(self, threshold_msg: AntiInstagramThresholds):
         self.anti_instagram_thresholds['lower'] = threshold_msg.low
         self.anti_instagram_thresholds['higher'] = threshold_msg.high
@@ -116,7 +167,7 @@ class LineDetectorNode(Node):
         Performs the following steps for each incoming image:
         #. Performs color correction
         #. Resizes the image to the ``~img_size`` resolution
-        #. Removes the top ``~top_cutoff`` rows in order to remove the part ofthe image that doesn't include the road
+        #. Removes the top ``~top_cutoff`` rows in order to remove the part of the image that doesn't include the road
         #. Extracts the line segments in the image using :py:class:`line_detector.LineDetector`
         #. Converts the coordinates of detected segments to normalized ones
         #. Creates and publishes the resultant :obj:`duckietown_msgs.msg.SegmentList` message
@@ -301,21 +352,24 @@ class LineDetectorNode(Node):
             c = color_range.representative
             c = np.uint8([[[c[0], c[1], c[2]]]])
             color = cv2.cvtColor(c, cv2.COLOR_HSV2BGR).squeeze().astype(int)
+            # Convert from numpy.ndarray to tuple
+            color = tuple((int(val) for val in color))
             for i in range(len(color_range.low)):
+                pt1 = (
+                    int((color_range.high[i, channel_idx[1]] / 2).astype(int)),
+                    int((color_range.high[i, channel_idx[0]] / 2).astype(int))
+                )
+                pt2 = (
+                    int((color_range.low[i, channel_idx[1]] / 2).astype(int)),
+                    int((color_range.low[i, channel_idx[0]] / 2).astype(int))
+                )
                 cv2.rectangle(
                     im,
-                    pt1=(
-                        (color_range.high[i, channel_idx[1]] / 2).astype(np.uint8),
-                        (color_range.high[i, channel_idx[0]] / 2).astype(np.uint8),
-                    ),
-                    pt2=(
-                        (color_range.low[i, channel_idx[1]] / 2).astype(np.uint8),
-                        (color_range.low[i, channel_idx[0]] / 2).astype(np.uint8),
-                    ),
+                    pt1=pt1,
+                    pt2=pt2,
                     color=color,
                     lineType=cv2.LINE_4,
                 )
-        # ---
         return im
 
 

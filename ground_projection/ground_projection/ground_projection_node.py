@@ -25,9 +25,6 @@ class GroundProjectionNode(Node):
     plane and in the robot's reference frame. In this way it enables lane
     localization in the 2D ground plane. This projection is performed using the
     homography matrix obtained from the extrinsic calibration procedure.
-    Args:
-        node_name (:obj:`str`): a unique, descriptive name for the node that
-            ROS will use
     Subscribers:
         ~camera_info (:obj:`sensor_msgs.msg.CameraInfo`): Intrinsic properties
             of the camera. Needed for rectifying the segments.
@@ -39,7 +36,8 @@ class GroundProjectionNode(Node):
         ~debug/ground_projection_image/compressed
             (:obj:`sensor_msgs.msg.CompressedImage`): Debug image that shows the
             robot relative to the projected segments. Useful to check if the
-            extrinsic calibration is accurate.
+            extrinsic calibration is accurate. Only published on if there is at
+            least 1 subscriber.
     """
     bridge: CvBridge
     recitier: Optional[Rectify]
@@ -67,7 +65,7 @@ class GroundProjectionNode(Node):
             "~/lineseglist_in",
             self.lineseglist_cb,
             1)
-        
+
         # Publishers
         self.pub_lineseglist = self.create_publisher(
             SegmentList,
@@ -77,9 +75,11 @@ class GroundProjectionNode(Node):
             CompressedImage,
             "~/debug/ground_project_image/compressed",
             1)
-        
+
         self.bridge = CvBridge()
         self.debug_img_bg = None
+
+        self.get_logger().info("Initialized")
 
     def get_launch_parameters(self) -> None:
         self.declare_parameter("veh")
@@ -292,7 +292,7 @@ class GroundProjectionNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = GroundProjectionNode("ground_projection_ndoe")
+    node = GroundProjectionNode("ground_projection_node")
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

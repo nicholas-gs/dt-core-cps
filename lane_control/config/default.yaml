@@ -22,4 +22,3 @@
     stop_line_slowdown:
       start: 0.6
       end: 0.15
-    verbose: 0

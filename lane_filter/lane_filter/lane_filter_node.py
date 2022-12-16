@@ -34,15 +34,14 @@ class LaneFilterNode(Node):
         self.t_last_update: Time = self.get_clock().now()
         assert(isinstance(self.t_last_update, Time))
         self.current_velocity = None
+        self.current_velocity_warn_count = 0
         self.latencyArray = []
 
         # Subscribers
         self.sub = self.create_subscription(SegmentList, "~/segment_list",
             self.cb_process_segments, 1)
         self.sub_velocity = self.create_subscription(Twist2DStamped,
-            "~/car_cmd", self.update_velocity, 1)
-        # self.sub_change_params = self.create_subscription(String,
-        #     "~/change_params", self.cb_temporary_change_params)        
+            "~/car_cmd", self.update_velocity_cb, 1)
 
         # Publishers
         self.pub_lane_pose = self.create_publisher(LanePose, "~/lane_pose",
@@ -63,6 +62,7 @@ class LaneFilterNode(Node):
         with open(file_path, 'r') as f:
             data = yaml.safe_load(f)
         self._filter = data['lane_filter_histogram_configuration']
+        self.get_logger().debug(f"Loaded config file: {self._filter}")
 
     def cb_process_segments(self, segment_list_msg: SegmentList):
         # Get actual timestamp for latency measurement
@@ -71,12 +71,16 @@ class LaneFilterNode(Node):
         # Step 1: predict
         current_time = self.get_clock().now()
         if self.current_velocity:
-            dt = current_time - self.t_last_update
+            # Get time elapsed in seconds
+            dt = ((current_time - self.t_last_update).nanoseconds) / 1e9
             self.filter.predict(dt=dt, v=self.current_velocity.v,
                 w=self.current_velocity.omega)
         else:
-            self.get_logger().warn(f"Unable to call `predict` on filter because"\
-                " `current_velocity` is None")
+            # Prevent flooding warning messages
+            if self.current_velocity_warn_count % 20 == 0:
+                self.get_logger().warn(f"Unable to call `predict` on filter \
+because `current_velocity` is None (20/20)")
+            self.current_velocity_warn_count += 1
 
         self.t_last_update = current_time
 
@@ -148,7 +152,9 @@ class LaneFilterNode(Node):
             belief_img.header.stamp = segment_list_msg.header.stamp
             self.pub_belief_img.publish(belief_img)
 
-    def update_velocity(self, msg: Twist2DStamped):
+    def update_velocity_cb(self, msg: Twist2DStamped):
+        """Callback method for current car command message
+        """
         self.current_velocity = msg
 
 

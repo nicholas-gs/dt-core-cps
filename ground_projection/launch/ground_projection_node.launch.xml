@@ -1,12 +1,9 @@
 <?xml version='1.0'?>
 <launch>
     <arg name="veh"/>
-    <!-- <arg name="param_file_name" default="default"/> -->
 
     <node pkg="ground_projection" exec="ground_projection_node" 
         name="ground_projection_node" namespace="$(var veh)">
         <param name="veh" value="$(var veh)"/>
-        <!-- <param name="param_file_path" 
-            value="$(find-pkg-share ground_projection)/config/$(var param_file_name).yaml"/> -->
     </node>
 </launch>
