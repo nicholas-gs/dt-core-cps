@@ -1,0 +1,12 @@
+image_size_width: 0
+image_size_height: 0
+
+canny_edge_parameters:
+  threshold_lower: 50
+  threshold_upper: 150
+  aperture_size: 3
+
+hough_parameters:
+  threshold: 20
+  min_line_length: 50
+  max_line_gap: 30
