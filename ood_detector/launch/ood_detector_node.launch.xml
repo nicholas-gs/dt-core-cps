@@ -1,0 +1,7 @@
+<?xml version='1.0'?>
+<launch>
+    <arg name="veh"/>
+
+    <node pkg="ood_detector" exec="ood_detector_node" name="ood_detector_node" 
+        namespace="$(var veh)"/>
+</launch>

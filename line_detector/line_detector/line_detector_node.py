@@ -14,14 +14,20 @@ from sensor_msgs.msg import (
 )
 
 from dt_image_processing_utils import AntiInstagram
+from dt_image_processing_utils import normalize_lines
 from line_detector import (
     plotMaps,
     plotSegments,
     ColorRange,
     LineDetector
 )
+from dt_ood_interfaces_cps.msg import (
+    BoundedLine,
+    DetectorInput
+)
 from dt_interfaces_cps.msg import (
     Segment,
+    Vector2D,
     SegmentList,
     AntiInstagramThresholds
 )
@@ -61,11 +67,12 @@ class LineDetectorNode(Node):
         ~anti_instagram_node/thresholds: The thresholds to do color correction
     Publishers:
         ~segment_list: A list of the detected segments.
-        ~debug/segments/compressed: Debug topic with the segments drawn on the
+        ~ood_input: Input for the Out-of-Distribution detector
+        ~debug/segments: Debug topic with the segments drawn on the
             input image
-        ~debug/edges/compressed: Debug topic with the Canny edges drawn on the
+        ~debug/edges: Debug topic with the Canny edges drawn on the
             input image
-        ~debug/maps/compressed: Debug topic with the regions falling in each
+        ~debug/maps: Debug topic with the regions falling in each
             color range drawn on the input image
         ~debug/ranges_HS: Debug topic with a histogram of the colors in the
             input image and the color ranges, Hue-Saturation projection
@@ -97,18 +104,25 @@ class LineDetectorNode(Node):
             list(self._colors.items())}
 
         # Publishers
-        self.pub_lines = self.create_publisher(SegmentList, "~/segment_list", 1)
+        self.pub_lines = self.create_publisher(
+            SegmentList,
+            "~/segment_list",
+            1)
+        self.pub_ood = self.create_publisher(
+            DetectorInput,
+            "~/ood_input",
+            1)
         self.pub_d_segments = self.create_publisher(
-            CompressedImage,
-            "~/debug/segments/compressed",
+            Image,
+            "~/debug/segments",
             1)
         self.pub_d_edges = self.create_publisher(
-            CompressedImage,
-            "~/debug/edges/compressed",
+            Image,
+            "~/debug/edges",
             1)
         self.pub_d_maps = self.create_publisher(
-            CompressedImage,
-            "~/debug/maps/compressed",
+            Image,
+            "~/debug/maps",
             1)
         # these are not compressed because compression adds undesired blur
         self.pub_d_ranges_HS = self.create_publisher(
@@ -200,72 +214,85 @@ _img_size: {self._img_size}")
         detections = {color : self.detector.detectLines(ranges)
             for color, ranges in list(self.color_ranges.items())}
 
-        # Construct a SegmentList
-        segment_list = SegmentList()
-        segment_list.header.stamp = image_msg.header.stamp
+        if self.pub_lines.get_subscription_count() > 0:
+            # Construct a SegmentList
+            segment_list = SegmentList()
+            segment_list.header.stamp = image_msg.header.stamp
 
-        # Remove the offset in coordinates coming from the
-        # removing of the top part
-        arr_cutoff = np.array([0, self._top_cutoff, 0, self._top_cutoff])
-        arr_ratio = np.array([
-            1.0/self._img_size[1],
-            1.0/self._img_size[0],
-            1.0/self._img_size[1],
-            1.0/self._img_size[0],
-        ])
+            # Fill in the segment_list with all the detected segments
+            for color, det in list(detections.items()):
+                # Get the ID for the color from the Segment msg definition
+                # Throw and exception otherwise
+                if len(det.lines) > 0 and len(det.normals) > 0:
+                    try:
+                        color_id = getattr(Segment, color)
+                        lines_normalized = normalize_lines(
+                            det.lines, self._top_cutoff, self._img_size)
+                        segment_list.segments.extend(
+                            self._to_segment_msg(
+                                lines_normalized, det.normals, color_id)
+                        )
+                    except AttributeError:
+                        self.get_logger().error(
+                            f"Color name {color} is not defined in the"\
+                                " Segment message")
 
-        # Fill in the segment_list with all the detected segments
-        for color, det in list(detections.items()):
-            # Get the ID for the color from the Segment msg definition
-            # Throw and exception otherwise
-            if len(det.lines) > 0 and len(det.normals) > 0:
-                try:
-                    color_id = getattr(Segment, color)
-                    lines_normalized = (det.lines + arr_cutoff) * arr_ratio
-                    segment_list.segments.extend(
-                        self._to_segment_msg(
-                            lines_normalized, det.normals, color_id)
-                    )
-                except AttributeError:
-                    self.get_logger().error(
-                        f"Color name {color} is not defined in the"\
-                            " Segment message")
+            self.pub_lines.publish(segment_list)
 
-        # Publish the message
-        self.pub_lines.publish(segment_list)
+        if self.pub_ood.get_subscription_count() > 0:
+            ood_msg = DetectorInput()
+            ood_msg.header.stamp = image_msg.header.stamp
+            ood_msg.type = "canny"
+            ood_msg.cutoff = self._top_cutoff
+            ood_msg.frame = self.bridge.cv2_to_compressed_imgmsg(self.detector.canny_edges)
 
-        # If there are any subscribers to the debug topics, generate a debug
-        # image and publish it
+            bounded_lines = []
+            for color, det in list(detections.items()):
+                for line in det.lines:
+                    p1 = Vector2D(x=float(line[0]), y=float(line[1]))
+                    p2 = Vector2D(x=float(line[2]), y=float(line[3]))
+                    bounded_line = BoundedLine(
+                        coordinates=[p1,p2], color=getattr(Segment, color))
+                    bounded_lines.append(bounded_line)
+
+            ood_msg.lines = bounded_lines
+            self.pub_ood.publish(ood_msg)
+
+        self._publish_debug_topics(image, image_msg.header, detections)
+
+    def _publish_debug_topics(self, image, header, detections):
+        """If there are any subscribers to the debug topics, generate a debug
+        image and publish it.
+        """
         if self.pub_d_segments.get_subscription_count() > 0:
             colorrange_detections = {self.color_ranges[c] : det for c, det in
                 detections.items()}
             debug_img = plotSegments(image, colorrange_detections)
-            debug_image_msg = self.bridge.cv2_to_compressed_imgmsg(debug_img)
-            debug_image_msg.header = image_msg.header
+            debug_image_msg = self.bridge.cv2_to_imgmsg(debug_img, "bgr8")
+            debug_image_msg.header = header
             self.pub_d_segments.publish(debug_image_msg)
 
         if self.pub_d_edges.get_subscription_count() > 0:
-            debug_image_msg = self.bridge.cv2_to_compressed_imgmsg(
+            debug_image_msg = self.bridge.cv2_to_imgmsg(
                 self.detector.canny_edges)
-            debug_image_msg.header = image_msg.header
+            debug_image_msg.header = header
             self.pub_d_edges.publish(debug_image_msg)
 
         if self.pub_d_maps.get_subscription_count() > 0:
             colorrange_detections = {
                 self.color_ranges[c]: det for c, det in detections.items()}
             debug_img = plotMaps(image, colorrange_detections)
-            debug_image_msg = self.bridge.cv2_to_compressed_imgmsg(debug_img)
-            debug_image_msg.header = image_msg.header
+            debug_image_msg = self.bridge.cv2_to_imgmsg(debug_img, "bgr8")
+            debug_image_msg.header = header
             self.pub_d_maps.publish(debug_image_msg)
 
-        # for channels in ["HS", "SV", "HV"]:
         for channels in ["HS", "SV", "HV"]:
             publisher = getattr(self, f"pub_d_ranges_{channels}")
             if publisher.get_subscription_count() > 0:
                 debug_img = self._plot_ranges_histogram(channels)
                 debug_image_msg = self.bridge.cv2_to_imgmsg(
                     debug_img, encoding="bgr8")
-                debug_image_msg.header = image_msg.header
+                debug_image_msg.header = header
                 publisher.publish(debug_image_msg)
 
     @staticmethod

@@ -1,10 +1,9 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>line_detector</name>
+  <name>ood_detector</name>
   <version>1.0.0</version>
-  <description>Line Detector Node</description>
-  <maintainer email="alpetrov@ethz.ch">Aleksandar Petrov</maintainer>
+  <description>Out-of-Distribution detector</description>
   <maintainer email="nicholasganshyan@gmail.com">nicholas-gs</maintainer>
   <license>GPLv3</license>
 
