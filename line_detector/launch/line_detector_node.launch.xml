@@ -2,7 +2,7 @@
 <launch>
     <arg name="veh"/>
     <arg name="param_file_name" default="default"/>
-    <arg name="output_to_ood" default="cannyx"
+    <arg name="output_to_ood" default="raw"
         description="Type of output to be sent to the out-of-distribution detector
             (e.g. 'raw' and 'canny')"/>
 

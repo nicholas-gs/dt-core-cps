@@ -254,11 +254,12 @@ _img_size: {self._img_size}")
         if self.pub_ood.get_subscription_count() > 0:
             ood_msg = DetectorInput()
             ood_msg.header.stamp = image_msg.header.stamp
-            ood_msg.type = "canny"
             ood_msg.cutoff = self._top_cutoff
             if self._output_to_ood == "raw":
+                ood_msg.type = "raw"
                 ood_msg.frame = self.bridge.cv2_to_compressed_imgmsg(image)
             elif self._output_to_ood == "canny":
+                ood_msg.type = "canny"
                 ood_msg.frame = self.bridge.cv2_to_compressed_imgmsg(
                     self.detector.canny_edges)
 
