@@ -83,7 +83,8 @@ class LineDetectorNode(Node):
     """
     def __init__(self, node_name: str):
         super().__init__(node_name)
-        self.load_config_file(self.get_config_filepath())
+        self.get_launch_configs()
+        self.load_config_file(self._param_file_path)
 
         self.bridge = CvBridge()
 
@@ -152,10 +153,20 @@ class LineDetectorNode(Node):
 
         self.get_logger().info("Initialized.")
 
-    def get_config_filepath(self) -> str:
+    def get_launch_configs(self) -> None:
         self.declare_parameter("param_file_path")
-        return self.get_parameter("param_file_path").get_parameter_value()\
-            .string_value
+        self.declare_parameter("output_to_ood")
+
+        self._param_file_path = self.get_parameter("param_file_path")\
+            .get_parameter_value().string_value
+        self._output_to_ood = self.get_parameter("output_to_ood")\
+            .get_parameter_value().string_value
+
+        valid_outputs = ["raw", "canny"]
+        if self._output_to_ood not in valid_outputs:
+            self.get_logger().warn(f"{self._output_to_ood} \
+not a valid configuration in {valid_outputs}, using 'raw' as default")
+            self._output_to_ood = "raw"
 
     def load_config_file(self, file_path: str):
         with open(file=file_path) as f:
@@ -165,7 +176,8 @@ class LineDetectorNode(Node):
         self._top_cutoff = data.get('top_cutoff')
         self._img_size = data.get('img_size')
 
-        self.get_logger().debug(f"Loaded config file: \
+        self.get_logger().debug(f"Initialized with parameters: \
+_output_to_ood: {self._output_to_ood}, \
 _line_detector_parameters: {self._line_detector_parameters}, \
 _colors: {self._colors}, \
 _top_cutoff: {self._top_cutoff}, \
@@ -244,11 +256,17 @@ _img_size: {self._img_size}")
             ood_msg.header.stamp = image_msg.header.stamp
             ood_msg.type = "canny"
             ood_msg.cutoff = self._top_cutoff
-            ood_msg.frame = self.bridge.cv2_to_compressed_imgmsg(self.detector.canny_edges)
+            if self._output_to_ood == "raw":
+                ood_msg.frame = self.bridge.cv2_to_compressed_imgmsg(image)
+            elif self._output_to_ood == "canny":
+                ood_msg.frame = self.bridge.cv2_to_compressed_imgmsg(
+                    self.detector.canny_edges)
 
             bounded_lines = []
             for color, det in list(detections.items()):
                 for line in det.lines:
+                    # We use the 'unnormalized' lines because the `image`
+                    # is resized down and the top cutoff
                     p1 = Vector2D(x=float(line[0]), y=float(line[1]))
                     p2 = Vector2D(x=float(line[2]), y=float(line[3]))
                     bounded_line = BoundedLine(

@@ -2,11 +2,15 @@
 <launch>
     <arg name="veh"/>
     <arg name="param_file_name" default="default"/>
+    <arg name="output_to_ood" default="cannyx"
+        description="Type of output to be sent to the out-of-distribution detector
+            (e.g. 'raw' and 'canny')"/>
 
     <node pkg="line_detector" exec="line_detector_node" name="line_detector_node" 
         namespace="$(var veh)">
         <param name="veh" value="$(var veh)"/>
         <param name="param_file_path" 
             value="$(find-pkg-share line_detector)/config/$(var param_file_name).yaml"/>
+        <param name="output_to_ood" value="$(var output_to_ood)"/>
     </node>
 </launch>
