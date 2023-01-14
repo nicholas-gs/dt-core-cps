@@ -18,13 +18,17 @@ All colours must be given in ``HSV`` space.
             ``N`` colour ranges.
         high (:obj:`numpy array`): An ``Nx3`` array with the high ends of
             ``N`` colour ranges.
+        representation (:obj:`numpy array`): An ``1x3`` array with the color
+            to use to represent the color ranges. If `None` is provided, a
+            default is used.
     """
-    def __init__(self, low, high):
+    def __init__(self, low, high, representation=None):
         self.low = low
         self.high = high
+        self.representation = representation
 
     @classmethod
-    def fromDict(cls, dictionary):
+    def fromDict(cls, dictionary, representation=None):
         """
         Generates a :py:class:`ColorRange` object from a dictionary.
         Expects the colors to be given in ``HSV`` space.
@@ -40,6 +44,9 @@ All colours must be given in ``HSV`` space.
         Args:
             dictionary (:obj:`dict`): The yaml dictionary describing the
                 color ranges.
+            representation (:obj:`tuple`): The tuple describing the
+                representative color to represent the color ranges. If `None`,
+                then a default is used.
         Returns:
             :obj:`ColorRange`: the generated ColorRange object
         """
@@ -72,7 +79,8 @@ All colours must be given in ``HSV`` space.
                 "entries: a low and high value for each color range."
             )
 
-        return cls(low=low, high=high)
+        rep = np.array(representation) if representation is not None else None
+        return cls(low=low, high=high, representation=rep)
 
     def inRange(self, image):
         """
@@ -102,4 +110,6 @@ All colours must be given in ``HSV`` space.
             :obj:`list`: a list with 3 entries representing an HSV color
         """
 
-        return list(0.5 * (self.high[0] + self.low[0]).astype(int))
+        if self.representation is None:
+            return list(0.5 * (self.high[0] + self.low[0]).astype(int))
+        return list(self.representation)

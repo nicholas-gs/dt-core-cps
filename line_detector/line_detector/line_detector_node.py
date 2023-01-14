@@ -101,7 +101,8 @@ class LineDetectorNode(Node):
         # Parameter Server / config file
         self.detector = LineDetector(**self._line_detector_parameters)
         # Update the color ranges objects
-        self.color_ranges = {color : ColorRange.fromDict(d) for color, d in
+        self.color_ranges = {color : ColorRange.fromDict(d,
+            self._color_representations[color]) for color, d in
             list(self._colors.items())}
 
         # Publishers
@@ -173,6 +174,7 @@ not a valid configuration in {valid_outputs}, using 'raw' as default")
             data = yaml.safe_load(f)
         self._line_detector_parameters = data.get('line_detector_parameters')
         self._colors = data.get('colors')
+        self._color_representations = data.get('color_representations')
         self._top_cutoff = data.get('top_cutoff')
         self._img_size = data.get('img_size')
 
@@ -180,6 +182,7 @@ not a valid configuration in {valid_outputs}, using 'raw' as default")
 _output_to_ood: {self._output_to_ood}, \
 _line_detector_parameters: {self._line_detector_parameters}, \
 _colors: {self._colors}, \
+_color_representations: {self._color_representations}, \
 _top_cutoff: {self._top_cutoff}, \
 _img_size: {self._img_size}")
 
