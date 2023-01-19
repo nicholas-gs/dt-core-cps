@@ -114,6 +114,10 @@ class LineDetectorNode(Node):
             DetectorInput,
             "~/ood_input",
             1)
+        self.pub_d_hough = self.create_publisher(
+            Image,
+            "~/debug/hough",
+            1)
         self.pub_d_segments = self.create_publisher(
             Image,
             "~/debug/segments",
@@ -286,6 +290,15 @@ _img_size: {self._img_size}")
         """If there are any subscribers to the debug topics, generate a debug
         image and publish it.
         """
+        if self.pub_d_hough.get_subscription_count() > 0:
+            colorrange_detections = {self.color_ranges[c] : det for c, det in
+                detections.items()}
+            black_frame = np.zeros(image.shape, dtype=np.uint8)
+            debug_img = plotSegments(black_frame, colorrange_detections, True)
+            debug_image_msg = self.bridge.cv2_to_imgmsg(debug_img, "bgr8")
+            debug_image_msg.header = header
+            self.pub_d_hough.publish(debug_image_msg)
+
         if self.pub_d_segments.get_subscription_count() > 0:
             colorrange_detections = {self.color_ranges[c] : det for c, det in
                 detections.items()}
@@ -301,9 +314,10 @@ _img_size: {self._img_size}")
             self.pub_d_edges.publish(debug_image_msg)
 
         if self.pub_d_maps.get_subscription_count() > 0:
+            black_frame = np.zeros(image.shape, dtype=np.uint8)
             colorrange_detections = {
                 self.color_ranges[c]: det for c, det in detections.items()}
-            debug_img = plotMaps(image, colorrange_detections)
+            debug_img = plotMaps(black_frame, colorrange_detections)
             debug_image_msg = self.bridge.cv2_to_imgmsg(debug_img, "bgr8")
             debug_image_msg.header = header
             self.pub_d_maps.publish(debug_image_msg)

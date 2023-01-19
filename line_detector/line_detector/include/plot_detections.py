@@ -7,13 +7,15 @@ import numpy as np
 __all__ = ['plotSegments', 'plotMaps']
 
 
-def plotSegments(image, detections):
+def plotSegments(image, detections, default_color=False):
     """
     Draws a set of line segment detections on an image.
     Args:
         image (:obj:`numpy array`): an image
-            detections (`dict`): a dictionary that has keys :py:class:`ColorRange`
+        detections (`dict`): a dictionary that has keys :py:class:`ColorRange`
             and values :py:class:`Detection`
+        with_color (`boolean`): Draw the line segments with their defined color,
+            or using a deafult color.
     Returns:
         :obj:`numpy array`: the image with the line segments drawn on top of it.
     """
@@ -22,8 +24,11 @@ def plotSegments(image, detections):
     for color_range, det in list(detections.items()):
 
         # convert HSV color to BGR
-        c = color_range.representative
-        c = np.uint8([[[c[0], c[1], c[2]]]])
+        if not default_color:
+            c = color_range.representative
+            c = np.uint8([[[c[0], c[1], c[2]]]])
+        else:
+            c = np.uint8([[[255, 255, 255]]])
         color = cv2.cvtColor(c, cv2.COLOR_HSV2BGR).squeeze().astype(int)
         # plot all detected line segments and their normals
         for i in range(len(det.normals)):
