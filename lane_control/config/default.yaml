@@ -2,13 +2,13 @@
   ros__parameters:
     v_bar: 0.19
     k_d: -6.0
-    k_theta: -5
+    k_theta: -5.0
     k_Id: -0.3
     k_Iphi: 0.0
     theta_thres: 0.523
     d_thres: 0.2615
     d_offset: 0.0
-    omega_ff: 0
+    omega_ff: 0.0
     integral_bounds:
       d:
         top: 0.3
@@ -22,3 +22,5 @@
     stop_line_slowdown:
       start: 0.6
       end: 0.15
+
+# Make sure to add a decimal point to whole numbers !!!
