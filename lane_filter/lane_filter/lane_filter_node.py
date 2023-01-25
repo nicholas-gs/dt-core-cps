@@ -155,6 +155,8 @@ because `current_velocity` is None (20/20)")
     def update_velocity_cb(self, msg: Twist2DStamped):
         """Callback method for current car command message
         """
+        if self.current_velocity is None:
+            self.get_logger().info("Received first car_cmd callback")
         self.current_velocity = msg
 
 

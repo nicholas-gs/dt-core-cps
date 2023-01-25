@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import json
 import rclpy
 import numpy as np
 
@@ -95,6 +96,7 @@ class LaneControllerNode(Node):
 
         # Initialize variables
         self.fsm_state = None
+        self.received_wheels_cmd_executed = False
         self.wheels_cmd_executed = WheelsCmdStamped()
         self.pose_msg = LanePose()
         self.pose_initialized = False
@@ -142,7 +144,8 @@ class LaneControllerNode(Node):
             self.obstacle_stop_line_reading_cb,
             1)
 
-        self.get_logger().info(f"Initialised with : {self.params}")
+        dump = json.dumps(self.params, sort_keys=True, indent=2)
+        self.get_logger().info(f"Initialised with {dump}")
 
     def load_launch_params(self) -> None:
         """Retrieve and store all the launch parameters."""
@@ -309,6 +312,9 @@ class LaneControllerNode(Node):
         :param msg: Executed wheel commands
         :type msg: WheelsCmdStamped
         """
+        if not self.received_wheels_cmd_executed:
+            self.received_wheels_cmd_executed = True
+            self.get_logger().info("Received first wheels_cmd callback")
         self.wheels_cmd_executed = msg
 
     def stop_line_reading_cb(self, msg: StopLineReading):
