@@ -1,7 +1,20 @@
 <?xml version='1.0'?>
 <launch>
     <arg name="veh"/>
+    <arg name="ood_model_name" default="vae_n5_large_dataset_60epoch"/>
+    <arg name="ood_threshold" default="0.0007"/>
+    <arg name="crop_type" default="bin"
+        description="Defines how to extract each crop to create the dataset (e.g. 'bin', 'trim')"/>
+    <arg name="crop_thickness" default="2"
+        description="Thickness of the cropped segments"/>
+    <arg name="dimensions" default="[32]"/>
 
     <node pkg="ood_detector" exec="ood_detector_node" name="ood_detector_node" 
-        namespace="$(var veh)"/>
+        namespace="$(var veh)">
+        <param name="ood_model_name" value="$(var ood_model_name)"/>
+        <param name="ood_threshold" value="$(var ood_threshold)"/>
+        <param name="crop_type" value="$(var crop_type)"/>
+        <param name="crop_thickness" value="$(var crop_thickness)"/>
+        <param name="dimensions" value="$(var dimensions)"/>
+    </node>
 </launch>

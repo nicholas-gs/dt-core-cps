@@ -20,6 +20,8 @@
   <exec_depend>dt_image_processing_utils</exec_depend>
   <exec_depend>dt_interfaces_cps</exec_depend>
   <exec_depend>dt_ood_interfaces_cps</exec_depend>
+  <exec_depend>dt_ood_cps</exec_depend>
+  <exec_depend>dt_ood_utils</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>

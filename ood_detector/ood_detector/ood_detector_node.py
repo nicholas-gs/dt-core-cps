@@ -1,16 +1,29 @@
 #!/usr/bin/env python3
 
+import os
 import cv2
+import sys
 import rclpy
+import pprint
 import numpy as np
+
+import torch
+import torchvision
 
 from typing import List
 from rclpy.node import Node
+from ood_detector import vae
 from cv_bridge import CvBridge
-
 from sensor_msgs.msg import Image
+from dt_ood_utils.device import get_ood_dir
+
 from dt_image_processing_utils import normalize_lines
+from dt_ood_cps.cropper import (
+    BinCropper,
+    TrimCropper
+)
 from dt_ood_interfaces_cps.msg import (
+    OODAlert,
     BoundedLine,
     DetectorInput
 )
@@ -19,12 +32,30 @@ from dt_interfaces_cps.msg import (
     SegmentList
 )
 
+# This line is necessary for unpickle/loading the trained pytorch models.
+# https://stackoverflow.com/questions/2121874/python-pickling-after-changing-a-modules-directory
+sys.modules['vae'] = vae
+
+
+pp = pprint.PrettyPrinter(indent=2, sort_dicts=False)
+
+
+CROPPERS = {
+    'bin' : BinCropper,
+    'trim' : TrimCropper
+}
 
 class OoDDetector(Node):
     def __init__(self, node_name: str):
         super().__init__(node_name)
 
+        self.ood_model = None
         self.bridge = CvBridge()
+
+        self.load_launch_parameter()
+        self.cropper = CROPPERS[self._crop_type](self._crop_thickness,
+            bins=self._dimensions)
+        self.load_ood_model(self._ood_model_name)
 
         # Subscribers
         self.sub_segments = self.create_subscription(
@@ -38,40 +69,125 @@ class OoDDetector(Node):
             SegmentList,
             "~/ood_segment_list",
             1)
-        self.pub_image = self.create_publisher(
+        self.pub_id_image = self.create_publisher(
             Image,
-            "~/debug/crop_image",
+            "~/debug/id_image",
+            1)
+        self.pub_ood_image = self.create_publisher(
+            Image,
+            "~/debug/ood_image",
             1)
 
         self.get_logger().info("Initialized")
+
+    def load_launch_parameter(self):
+        self.declare_parameter("ood_model_name")
+        self.declare_parameter("ood_threshold")
+        self.declare_parameter("crop_type")
+        self.declare_parameter("crop_thickness")
+        self.declare_parameter("dimensions")
+
+        self._ood_model_name = self.get_parameter("ood_model_name")\
+            .get_parameter_value().string_value
+        self._ood_threshold = self.get_parameter("ood_threshold")\
+            .get_parameter_value().double_value
+        self._crop_type = self.get_parameter("crop_type")\
+            .get_parameter_value().string_value
+        self._crop_thickness = self.get_parameter("crop_thickness")\
+            .get_parameter_value().integer_value
+        _dimens = self.get_parameter("dimensions")\
+            .get_parameter_value().integer_array_value
+        self._dimensions = [(val, val) for val in _dimens]
+
+        log_str = pp.pformat({
+            "ood_model_name" : self._ood_model_name,
+            "ood_threshold" : self._ood_threshold,
+            "crop_type" : self._crop_type,
+            "crop_thickness" : self._crop_thickness,
+            "dimensions" : self._dimensions})
+
+        self.get_logger().info(f"Launch parameters: {log_str}")
+
+    def load_ood_model(self, file_name: str):
+        """Load the trained pytorch model from the shared directory.
+
+        :param file_name: Name of .pt or .pth file
+        :type file_name: str
+        :raises ValueError: If cannot find matching file name.
+        """
+        model_path = os.path.join(get_ood_dir(), file_name)
+        extensions = ('pt', 'pth')
+
+        if model_path.find('.') == -1:
+            model_paths = [f"{model_path}.{ext}" for ext in extensions]
+        else:
+            model_paths = [model_path]
+
+        loaded_path = None
+        for path in model_paths:
+            if os.path.exists(path):
+                loaded_path = path
+                self.ood_model = torch.load(path)
+                self.ood_model.eval()
+                self.get_logger().info(f"OOD Model {loaded_path} loaded")
+
+        if loaded_path is None:
+            raise ValueError(f"Trained Pytorch OOD detector cannot be found at \
+{pp.pformat(model_paths)}")
 
     def cb_segments(self, msg: DetectorInput):
         uncompressed_img = self.bridge.compressed_imgmsg_to_cv2(
             msg.frame, "bgr8")
         lines, color_ids = OoDDetector._extract_lines(msg.lines)
 
-        filtered_lines = lines
+        id_lines = []
+        id_color_ids = []
+        ood_lines = []
+        tensor_transform = torchvision.transforms.ToTensor()
+        for line, color_ids in zip(lines, color_ids):
+            cropped_img = tensor_transform(
+                self.cropper.crop_segments(uncompressed_img, line))
+            mu, logvar = self.ood_model.encoder(cropped_img.unsqueeze(0))[:2]
+            kl_loss = 0.5 * torch.sum(mu.pow(2) + logvar.exp() - logvar - 1)
+            if kl_loss < self._ood_threshold:
+                id_lines.append(line)
+                id_color_ids.append(color_ids)
+            else:
+                ood_lines.append(line)
 
+        id_lines = np.array(id_lines)
+
+        # Publish the filtered lines
         segment_list = SegmentList()
         segment_list.header.stamp = msg.header.stamp
 
         img_size_height = uncompressed_img.shape[0] + msg.cutoff
         img_size_width =  uncompressed_img.shape[1]
 
-        filtered_lines_normalized = normalize_lines(
-            filtered_lines, msg.cutoff, (img_size_height, img_size_width))
+        id_lines_normalized = normalize_lines(
+            id_lines, msg.cutoff, (img_size_height, img_size_width))
         segment_list.segments = OoDDetector._to_segment_msg(
-            filtered_lines_normalized, color_ids)
+            id_lines_normalized, id_color_ids)
 
         self.pub_segments.publish(segment_list)
 
-        if self.pub_image.get_subscription_count() > 0:
-            cropped_img = OoDDetector._crop_segments(
-                uncompressed_img, filtered_lines, 2)
-            if (msg.type == "canny") and (len(cropped_img.shape) == 2):
-                cropped_img = cv2.cvtColor(cropped_img, cv2.COLOR_GRAY2BGR)
-            self.pub_image.publish(
-                self.bridge.cv2_to_imgmsg(cropped_img, encoding="bgr8"))
+        # Debug messages
+        if self.pub_id_image.get_subscription_count() > 0:
+            self.publish_debug_image(
+                uncompressed_img, id_lines, msg.type, self.pub_id_image)
+
+        if self.pub_ood_image.get_subscription_count() > 0:
+            self.publish_debug_image(
+                uncompressed_img, ood_lines, msg.type, self.pub_ood_image)
+
+    def publish_debug_image(self, image, lines, image_type, publisher):
+        """Publish debug image where image is cropped using the lines."""
+        cropped_img = OoDDetector._crop_segments(
+            image, lines, 2)
+        if (image_type == "canny") and (len(cropped_img.shape) == 2):
+            cropped_img = cv2.cvtColor(cropped_img, cv2.COLOR_GRAY2BGR)
+        publisher.publish(
+            self.bridge.cv2_to_imgmsg(cropped_img, encoding="bgr8"))
 
     @staticmethod
     def _extract_lines(lines: List[BoundedLine]):
@@ -82,7 +198,7 @@ class OoDDetector(Node):
             p2 = line.coordinates[1]
             xys.append([p1.x, p1.y, p2.x, p2.y])
             color_ids.append(line.color)
-        return np.array(xys, np.int), color_ids
+        return np.array(xys, int), color_ids
 
     @staticmethod
     def _to_segment_msg(lines, color_ids):
@@ -120,6 +236,7 @@ class OoDDetector(Node):
                 background, (line[0], line[1]), (line[2], line[3]),
                 color=(255,255,255), thickness=thickness)
         return cv2.bitwise_and(background, frame)
+
 
 def main(args=None):
     rclpy.init(args=args)
