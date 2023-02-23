@@ -1,13 +1,46 @@
-import argparse
-import math
-import os
-import torch
-import torchvision
-import pytorch_lightning
-import numpy
-import cv2
+#!/usr/bin/env python3
 
-from PIL import Image
+import torch
+
+BETA = 1
+
+CNN_ARCH = [
+    {
+        'in_channels': 3,
+        'out_channels': 4,
+        'k_conv': 3,
+        'k_pool': 2,
+        'activation': torch.nn.LeakyReLU(),
+    },
+    {
+        'in_channels': 4,
+        'out_channels': 8,
+        'k_conv': 3,
+        'k_pool': 2,
+        'activation': torch.nn.LeakyReLU(),
+    },
+    {
+        'in_channels': 8,
+        'out_channels': 16,
+        'k_conv': 3,
+        'k_pool': 2,
+        'activation': torch.nn.LeakyReLU(),
+    },
+    {
+        'in_channels': 16,
+        'out_channels': 32,
+        'k_conv': 3,
+        'k_pool': 2,
+        'activation': torch.nn.LeakyReLU(),
+    },
+    {
+        'in_channels': 32,
+        'out_channels': 64,
+        'k_conv': 3,
+        'k_pool': 2,
+        'activation': torch.nn.LeakyReLU(),
+    },
+]
 
 
 class EncConvBlock(torch.nn.Module):
@@ -109,8 +142,7 @@ class CnnDecoder(torch.nn.Module):
         return x
 
 
-class Vae(pytorch_lightning.LightningModule):
-
+class Vae(torch.nn.Module):
     def __init__(self, conv_blocks, fc_layers, beta=1, learning_rate=1e-5):
         super().__init__()
         self.beta = beta
@@ -188,234 +220,3 @@ class Vae(pytorch_lightning.LightningModule):
         x, y = predict_batch
         x_hat, mu, logvar = self.forward(x)
         return x_hat, mu, logvar, y
-
-
-class OodDataModule(pytorch_lightning.LightningDataModule):
-
-    def __init__(self, train_path, val_path, height, width, batch_size=1):
-        super().__init__()
-        self.save_hyperparameters()
-
-    def train_dataloader(self):
-        train_set = torchvision.datasets.ImageFolder(
-            root=self.hparams.train_path,
-            transform=torchvision.transforms.Compose([
-                torchvision.transforms.ToTensor(),
-                torchvision.transforms.Resize(
-                    (self.hparams.height, self.hparams.width))
-            ])
-        )
-        return torch.utils.data.DataLoader(
-            train_set,
-            batch_size=self.hparams.batch_size,
-            shuffle=True,
-            num_workers=len(os.sched_getaffinity(0)),
-            drop_last=True)
-
-    def val_dataloader(self):
-        val_set = torchvision.datasets.ImageFolder(
-            root=self.hparams.val_path,
-            transform=torchvision.transforms.Compose([
-                torchvision.transforms.ToTensor(),
-                torchvision.transforms.Resize(
-                    (self.hparams.height, self.hparams.width))
-            ])
-        )
-        return torch.utils.data.DataLoader(
-            val_set,
-            batch_size=min(len(val_set), self.hparams.batch_size),
-            num_workers=len(os.sched_getaffinity(0)),
-            drop_last=True)
-
-    def test_dataloader(self):
-        return torch.utils.data.DataLoader(
-            torchvision.datasets.ImageFolder(
-                root=self.hparams.val_path,
-                transform=torchvision.transforms.Compose([
-                    torchvision.transforms.ToTensor(),
-                    torchvision.transforms.Resize(
-                        (self.hparams.height, self.hparams.width))
-                ])
-            ),
-            batch_size=self.hparams.batch_size,
-            num_workers=len(os.sched_getaffinity(0)),
-            drop_last=True)
-
-    def predict_dataloader(self):
-        return torch.utils.data.DataLoader(
-            torchvision.datasets.ImageFolder(
-                root=self.hparams.val_path,
-                transform=torchvision.transforms.Compose([
-                    torchvision.transforms.ToTensor(),
-                    torchvision.transforms.Resize(
-                        (self.hparams.height, self.hparams.width))
-                ])
-            ),
-            batch_size=self.hparams.batch_size,
-            num_workers=len(os.sched_getaffinity(0)),
-            drop_last=True)
-
-
-class OpticalFlowDataModule(pytorch_lightning.LightningDataModule):
-
-    def __init__(self,
-        train_path,
-        val_path,
-        height,
-        width,
-        flows,
-        orientation,
-        batch_size=1
-    ):
-        super().__init__()
-        self.save_hyperparameters()
-
-    def train_dataloader(self):
-        train_set = OpticalFlowDataset(
-            root=self.hparams.train_path,
-            size=(self.hparams.height, self.hparams.width),
-            flow_depth=self.hparams.flows,
-            orientation=self.hparams.orientation,
-        )
-        return torch.utils.data.DataLoader(
-            train_set,
-            batch_size=self.hparams.batch_size,
-            shuffle=True,
-            num_workers=len(os.sched_getaffinity(0)),
-            drop_last=True
-        )
-
-    def val_dataloader(self):
-        val_set = OpticalFlowDataset(
-            root=self.hparams.val_path,
-            size=(self.hparams.height, self.hparams.width),
-            flow_depth=self.hparams.flows,
-            orientation=self.hparams.orientation,
-        )
-        return torch.utils.data.DataLoader(
-            val_set,
-            batch_size=min(len(val_set), self.hparams.batch_size),
-            num_workers=len(os.sched_getaffinity(0)),
-            drop_last=True
-        )
-
-
-class OpticalFlowDataset(torch.utils.data.Dataset):
-
-    def __init__(self, root: str, size, flow_depth=1, orientation='horiz'):
-        super().__init__()
-        self.root = root
-        self.data = []
-        flow_buffer = numpy.zeros((flow_depth, size[0], size[1]))
-        flow_buffer_ptr = 0
-        flow = None
-        last_image = None
-        for name in os.listdir(root):
-            curr_image = cv2.imread(
-                os.path.join(root, name), cv2.IMREAD_GRAYSCALE)
-            curr_image = cv2.resize(curr_image, (size[1], size[0]))
-            if last_image is not None:
-                flow = cv2.calcOpticalFlowFarneback(
-                    last_image,
-                    curr_image,
-                    flow,
-                    pyr_scale=0.5,
-                    levels=1,
-                    iterations=1,
-                    winsize=15,
-                    poly_n=5,
-                    poly_sigma=1.1,
-                    flags=0 if flow is None else cv2.OPTFLOW_USE_INITIAL_FLOW
-                )
-                flow_buffer[flow_buffer_ptr % flow_depth, :, :] = numpy.copy(
-                    flow[:, :, 0 if orientation == 'horiz' else 1])
-                if flow_buffer_ptr > flow_depth:
-                    self.data.append(flow_buffer)
-                flow_buffer_ptr += 1
-            last_image = numpy.copy(curr_image)
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        if torch.is_tensor(idx):
-            idx = idx.tolist()
-        return (torch.from_numpy(self.data[idx]).float(), 0)
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser('Train a VAE')
-    parser.add_argument(
-        '--dimensions',
-        help='Dimensions of the input image.  format: height x width'
-    )
-    parser.add_argument(
-        '--train_dataset',
-        help='Path to folder of training images'
-    )
-    parser.add_argument(
-        '--val_dataset',
-        help='Path to folder of validation images'
-    )
-    conv_blocks = []
-    args = parser.parse_args()
-    dimensions = max([int(d) for d in args.dimensions.split('x')])
-    channels = 3
-    while dimensions > 1:
-        conv_blocks.append(
-            {
-                'in_channels': channels,
-                'out_channels': 2 ** math.ceil(math.log2(channels) + 1),
-                'k_conv': 3,
-                'k_pool': 2,
-                'activation': torch.nn.LeakyReLU(),
-            }
-        )
-        dimensions //= 2
-        channels = 2 ** math.ceil(math.log2(channels) + 1)
-    conv_blocks.append(
-        {
-            'in_channels': channels,
-            'out_channels': 2 ** math.ceil(math.log2(channels) + 1),
-            'k_conv': 3,
-            'k_pool': 2,
-            'activation': torch.nn.LeakyReLU(),
-        }
-    )
-    channels = 2 ** math.ceil(math.log2(channels) + 1)
-    fc_blocks = [
-        {
-            'in_neurons': channels,
-            'out_neurons': 1024,
-            'activation': torch.nn.LeakyReLU()
-        },
-        {
-            'in_neurons': 1024,
-            'out_neurons': 64,
-            'activation': torch.nn.Identity()
-        }
-    ]
-    model = Vae(conv_blocks, fc_blocks)
-    height, width = tuple([int(d) for d in args.dimensions.split('x')])
-    data = OodDataModule(
-        args.train_dataset, args.val_dataset, height, width, batch_size=32)
-    trainer = pytorch_lightning.Trainer(
-        accelerator='gpu',
-        devices=1,
-        #auto_scale_batch_size='power',
-        #auto_lr_find=True,
-        deterministic=True,
-        min_epochs=50,
-        max_epochs=500,
-        log_every_n_steps=1,
-        logger=pytorch_lightning.loggers.TensorBoardLogger(save_dir='logs/'),
-        callbacks=[
-            pytorch_lightning.callbacks.early_stopping.EarlyStopping(
-                monitor='val_loss',
-                verbose=True,
-            )
-        ]
-    )
-    trainer.tune(model, datamodule=data)
-    trainer.fit(model, datamodule=data)
-    torch.save(model, f'vae{args.dimensions}.pt')

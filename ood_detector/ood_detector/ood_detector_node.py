@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import re
 import os
 import cv2
 import sys
@@ -127,8 +128,28 @@ class OoDDetector(Node):
         for path in model_paths:
             if os.path.exists(path):
                 loaded_path = path
-                self.ood_model = torch.load(path)
-                self.ood_model.eval()
+
+                N = int(re.findall("_n[0-9]+_", os.path.split(path)[-1],
+                    re.IGNORECASE)[0].split('_')[1][-1])
+                model = vae.Vae(
+                    conv_blocks=vae.CNN_ARCH,
+                    fc_layers=[
+                        {
+                            'in_neurons': 64,
+                            'out_neurons': 32,
+                            'activation': torch.nn.LeakyReLU(),
+                        },
+                        {
+                            'in_neurons': 32,
+                            'out_neurons': N * 2,
+                            'activation': torch.nn.Identity(),
+                        }
+                    ],
+                    beta=vae.BETA
+                )
+                model.load_state_dict(torch.load(path))
+                model.eval()
+                self.ood_model = model
                 self.get_logger().info(f"OOD Model {loaded_path} loaded")
 
         if loaded_path is None:

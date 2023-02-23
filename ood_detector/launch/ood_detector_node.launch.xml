@@ -1,7 +1,7 @@
 <?xml version='1.0'?>
 <launch>
     <arg name="veh"/>
-    <arg name="ood_model_name" default="vae_n5_large_dataset_60epoch"/>
+    <arg name="ood_model_name" default="vae_n5_large_dataset_60epoch_weights"/>
     <arg name="ood_threshold" default="0.0007"/>
     <arg name="crop_type" default="bin"
         description="Defines how to extract each crop to create the dataset (e.g. 'bin', 'trim')"/>
