@@ -38,7 +38,7 @@ from dt_interfaces_cps.msg import (
 sys.modules['vae'] = vae
 
 
-pp = pprint.PrettyPrinter(indent=2, sort_dicts=False)
+pp = pprint.PrettyPrinter(indent=2)
 
 
 CROPPERS = {
