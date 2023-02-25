@@ -70,6 +70,10 @@ class OoDDetector(Node):
             SegmentList,
             "~/ood_segment_list",
             1)
+        self.pub_cropped_image = self.create_publisher(
+            Image,
+            "~/debug/cropped_image",
+            1)
         self.pub_id_image = self.create_publisher(
             Image,
             "~/debug/id_image",
@@ -193,6 +197,10 @@ class OoDDetector(Node):
         self.pub_segments.publish(segment_list)
 
         # Debug messages
+        if self.pub_cropped_image.get_subscription_count() > 0:
+            self.publish_debug_image(
+                uncompressed_img, lines, msg.type, self.pub_cropped_image)
+
         if self.pub_id_image.get_subscription_count() > 0:
             self.publish_debug_image(
                 uncompressed_img, id_lines, msg.type, self.pub_id_image)
@@ -204,7 +212,7 @@ class OoDDetector(Node):
     def publish_debug_image(self, image, lines, image_type, publisher):
         """Publish debug image where image is cropped using the lines."""
         cropped_img = OoDDetector._crop_segments(
-            image, lines, 2)
+            image, lines, self._crop_thickness)
         if (image_type == "canny") and (len(cropped_img.shape) == 2):
             cropped_img = cv2.cvtColor(cropped_img, cv2.COLOR_GRAY2BGR)
         publisher.publish(
