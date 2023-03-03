@@ -170,8 +170,9 @@ class OoDDetector(Node):
         ood_lines = []
         tensor_transform = torchvision.transforms.ToTensor()
         for line, color_ids in zip(lines, color_ids):
-            cropped_img = tensor_transform(
-                self.cropper.crop_segments(uncompressed_img, line))
+            # Fix the size to 32x32 since thats what the VAE model is trained on
+            cropped_img = tensor_transform(cv2.resize(
+                self.cropper.crop_segments(uncompressed_img, line), (32,32)))
             mu, logvar = self.ood_model.encoder(cropped_img.unsqueeze(0))[:2]
             kl_loss = 0.5 * torch.sum(mu.pow(2) + logvar.exp() - logvar - 1)
             if kl_loss < self._ood_threshold:
@@ -189,8 +190,12 @@ class OoDDetector(Node):
         img_size_height = uncompressed_img.shape[0] + msg.cutoff
         img_size_width =  uncompressed_img.shape[1]
 
-        id_lines_normalized = normalize_lines(
-            id_lines, msg.cutoff, (img_size_height, img_size_width))
+        if len(id_lines) > 0:
+            id_lines_normalized = normalize_lines(
+                id_lines, msg.cutoff, (img_size_height, img_size_width))
+        else:
+            id_lines_normalized = []
+
         segment_list.segments = OoDDetector._to_segment_msg(
             id_lines_normalized, id_color_ids)
 
