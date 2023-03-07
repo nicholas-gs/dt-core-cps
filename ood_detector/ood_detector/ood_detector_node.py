@@ -70,6 +70,10 @@ class OoDDetector(Node):
             SegmentList,
             "~/ood_segment_list",
             1)
+        self.pub_ood_alert = self.create_publisher(
+            OODAlert,
+            "~/ood_alert",
+            1)
         self.pub_cropped_image = self.create_publisher(
             Image,
             "~/debug/cropped_image",
@@ -88,6 +92,7 @@ class OoDDetector(Node):
     def load_launch_parameter(self):
         self.declare_parameter("ood_model_name")
         self.declare_parameter("ood_threshold")
+        self.declare_parameter("alert_threshold")
         self.declare_parameter("crop_type")
         self.declare_parameter("crop_thickness")
         self.declare_parameter("dimensions")
@@ -95,6 +100,8 @@ class OoDDetector(Node):
         self._ood_model_name = self.get_parameter("ood_model_name")\
             .get_parameter_value().string_value
         self._ood_threshold = self.get_parameter("ood_threshold")\
+            .get_parameter_value().double_value
+        self._alert_threshold = self.get_parameter("alert_threshold")\
             .get_parameter_value().double_value
         self._crop_type = self.get_parameter("crop_type")\
             .get_parameter_value().string_value
@@ -107,11 +114,16 @@ class OoDDetector(Node):
         log_str = pp.pformat({
             "ood_model_name" : self._ood_model_name,
             "ood_threshold" : self._ood_threshold,
+            "alert_threshold" : self._alert_threshold,
             "crop_type" : self._crop_type,
             "crop_thickness" : self._crop_thickness,
             "dimensions" : self._dimensions})
 
         self.get_logger().info(f"Launch parameters: {log_str}")
+        
+        if self._alert_threshold < 0:
+            self.get_logger("Since alert threshold is less than 0, OOD alert \
+is disabled")
 
     def load_ood_model(self, file_name: str):
         """Load the trained pytorch model from the shared directory.
@@ -183,6 +195,8 @@ class OoDDetector(Node):
 
         id_lines = np.array(id_lines)
 
+        self.publish_ood_alert(msg.header, id_lines, ood_lines)
+
         # Publish the filtered lines
         segment_list = SegmentList()
         segment_list.header.stamp = msg.header.stamp
@@ -222,6 +236,12 @@ class OoDDetector(Node):
             cropped_img = cv2.cvtColor(cropped_img, cv2.COLOR_GRAY2BGR)
         publisher.publish(
             self.bridge.cv2_to_imgmsg(cropped_img, encoding="bgr8"))
+    
+    def publish_ood_alert(self, header, id_lines, ood_lines):
+        if self._alert_threshold < 0:
+            return
+        msg = OODAlert(header=header, ood=False)
+        self.pub_ood_alert.publish(msg)
 
     @staticmethod
     def _extract_lines(lines: List[BoundedLine]):
