@@ -52,6 +52,7 @@ class OoDDetector(Node):
 
         self.ood_model = None
         self.bridge = CvBridge()
+        self._ood_alert_count = 0
 
         self.load_launch_parameter()
         self.cropper = CROPPERS[self._crop_type](self._crop_thickness,
@@ -86,6 +87,18 @@ class OoDDetector(Node):
             Image,
             "~/debug/ood_image",
             1)
+
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.get_logger().info(f'Using device: {device}')
+
+        #Additional Info when using cuda
+        if device.type == 'cuda':
+            self.get_logger().info(torch.cuda.get_device_name(0))
+            self.get_logger().info('Memory Usage:')
+            self.get_logger().info(f'Allocated: \
+{round(torch.cuda.memory_allocated(0)/1024**3,1)} GB')
+            self.get_logger().info(f'Cached: \
+{round(torch.cuda.memory_reserved(0)/1024**3,1)} GB')
 
         self.get_logger().info("Initialized")
 
@@ -240,8 +253,19 @@ is disabled")
     def publish_ood_alert(self, header, id_lines, ood_lines):
         if self._alert_threshold < 0:
             return
-        msg = OODAlert(header=header, ood=False)
-        self.pub_ood_alert.publish(msg)
+        p = len(ood_lines) / (len(ood_lines) + len(id_lines))
+        alert = (p >= self._alert_threshold)
+        if alert:
+            self._ood_alert_count += 1
+        else:
+            self._ood_alert_count = 0
+
+        if self._ood_alert_count >= 3:
+            self.get_logger().warn(f"Publishing OOD Alert")
+            msg = OODAlert(header=header, ood=alert)
+            self.pub_ood_alert.publish(msg)
+        else:
+            return
 
     @staticmethod
     def _extract_lines(lines: List[BoundedLine]):

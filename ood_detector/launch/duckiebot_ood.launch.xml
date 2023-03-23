@@ -1,0 +1,9 @@
+<?xml version='1.0'?>
+<launch>
+    <arg name="veh" default="$(env ROBOT_NAME)"/>
+    <set_remap from="~/ood_input" to="/$(var veh)/line_detector_node/ood_input"/>
+    <set_remap from="~/ood_alert" to="/$(var veh)/gatekeeper_node/ood_alert"/>
+    <include file="$(find-pkg-share ood_detector)/launch/ood_detector_node.launch.xml">
+            <arg name="veh" value="$(var veh)"/>
+    </include>
+</launch>
